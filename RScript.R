@@ -6,6 +6,7 @@ library(scales)
 library(maps)
 library(stringr)
 library(RColorBrewer)
+require(viridis)
 #change format to en_us
 Sys.setlocale(locale = "en_US.UTF-8")
 
@@ -44,7 +45,7 @@ readfile %>%
   group_by(year=format(Datum,"%Y")) %>%
   summarise(launch= n()) %>%
   ggplot(aes(x=as.Date(year,format="%Y"),y=launch,group=1))+geom_line()+
-  labs(title="Launchs by year",x="Years", y="Launchcs")
+  labs(title="Launches by year",x="Years", y="Launches")
 #  scale_x_date(breaks =(date_breaks = '100 years'),date_labels = "%Y")
 #  ggtitle("Temporal Outliers of Node 25 ") + 
 
@@ -67,3 +68,21 @@ readfile %>%
   ggplot(aes(x=as.Date(year,format="%Y"),y=average))+geom_col()+
   labs(title="Average price by year",x="Years", y="Average price")
 
+#Launches by country
+launchcs <- readfile %>%
+  group_by(country) %>%
+  summarise(launch= n()) %>%
+  select(region=country,launch) 
+  #remove the NA  
+launchcs$country[launchcs$country=="Algeria, France"]="Algeria"
+launchcs$country[launchcs$country=="French Guiana, France"]="French Guiana"
+launchcs$country[launchcs$country=="Marshall Islands, USA"]="Marshall Islands"
+
+launchcs <- head(launchcs, -1)
+world_map <- map_data("world")
+
+right_join(launchcs,world_map,by="region") %>%
+  ggplot(aes(x = long, y = lat, group = group)) +
+  geom_polygon(aes(fill = launch), colour = "white")+
+  scale_fill_gradient(low = "red", high = "green",name = "Total Launches")
+  labs(title="Worldwide total launches by country")
