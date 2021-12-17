@@ -28,11 +28,22 @@ readfile$Datum<-sapply(readfile$Datum,function(x) if(nchar(x)<=20)
 readfile$Datum=as.POSIXct(readfile$Datum, format="%Y",origin = "1970-01-01", tz = "UTC")
 
 #extract countries
-all_countries <- str_c(unique(world.cities$country.etc), collapse = "|")
+world_map <- map_data("world")
+all_countries <- str_c(unique(world_map$region), collapse = "|")
+#all_countries <- str_c(unique(world.cities$country.etc), collapse = "|")
+readfile$location_country <- sapply(str_extract_all(readfile$Location, all_countries), toString)
 readfile$country <- sapply(str_extract_all(readfile$Location, all_countries), toString)
+
+#special case
+readfile$country[readfile$country=="Kazakhstan"]="Russia"
+readfile$country[readfile$country=="Algeria, France"]="France"
+readfile$country[readfile$country=="French Guiana, France"]="France"
+readfile$country[readfile$country=="Marshall Islands, USA"]="USA"
+readfile$country[readfile$country=="Kenya"]="Italy"
 
 #NA all the lost country
 readfile$country[readfile$country==""] <- NA
+readfile$location_country[readfile$location_country==""] <- NA
 
 #convert string to int
 readfile$Rocket <- as.double(readfile$Rocket)
@@ -48,6 +59,35 @@ readfile %>%
   labs(title="Launches by year",x="Years", y="Launches")
 #  scale_x_date(breaks =(date_breaks = '100 years'),date_labels = "%Y")
 #  ggtitle("Temporal Outliers of Node 25 ") + 
+
+#Nombre de lancement en fonction du pays
+launch_country <- readfile
+launch_country <- launch_country[!(is.na(launch_country$country)),]
+
+launch_country %>%
+  group_by(country) %>%
+  summarise(launch= n()) %>%
+  arrange(desc(launch), .by_group=TRUE ) %>%
+  ggplot(aes(x=launch,y= reorder(country,launch),group=1))+geom_bar(stat="identity")+
+  labs(title="Total launches by country",x="Launches", y="Country")
+
+#Nombre de lancement en fonction du pays by year
+launch_country <- readfile
+launch_country <- launch_country[!(is.na(launch_country$country)),]
+
+launch_country %>%
+  group_by(country) %>%
+  summarise(launch= n()) %>%
+  arrange(desc(launch), .by_group=TRUE ) %>%
+  ggplot(aes(x=launch,y= reorder(country,launch),group=1))+geom_bar(stat="identity")+
+  labs(title="Total launches by country",x="Launches", y="Country")
+
+#Nombre de lancement en fonction du temps
+readfile %>%
+  group_by(year=format(Datum,"%Y")) %>%
+  summarise(launch= n()) %>%
+  ggplot(aes(x=as.Date(year,format="%Y"),y=launch,group=1))+geom_line()+
+  labs(title="Launches by year",x="Years", y="Launches")
 
 #Prix en fonction du temps et pays
 countryCount = length(unique(readfile$country))
@@ -70,13 +110,13 @@ readfile %>%
 
 #Launches by country
 launchcs <- readfile %>%
-  group_by(country) %>%
+  group_by(location_country) %>%
   summarise(launch= n()) %>%
-  select(region=country,launch) 
+  select(region=location_country,launch) 
   #remove the NA  
-launchcs$country[launchcs$country=="Algeria, France"]="Algeria"
-launchcs$country[launchcs$country=="French Guiana, France"]="French Guiana"
-launchcs$country[launchcs$country=="Marshall Islands, USA"]="Marshall Islands"
+launchcs$region[launchcs$region=="Algeria, France"]="Algeria"
+launchcs$region[launchcs$region=="French Guiana, France"]="French Guiana"
+launchcs$region[launchcs$region=="Marshall Islands, USA"]="Marshall Islands"
 
 launchcs <- head(launchcs, -1)
 world_map <- map_data("world")
@@ -84,5 +124,5 @@ world_map <- map_data("world")
 right_join(launchcs,world_map,by="region") %>%
   ggplot(aes(x = long, y = lat, group = group)) +
   geom_polygon(aes(fill = launch), colour = "white")+
-  scale_fill_gradient(low = "red", high = "green",name = "Total Launches")
+  scale_fill_gradient(low = "red", high = "green",name = "Total Launches")+
   labs(title="Worldwide total launches by country")
