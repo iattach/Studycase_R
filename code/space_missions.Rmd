@@ -1,0 +1,252 @@
+---
+title: "Space Missions"
+output:
+  html_document:
+    df_print: paged
+---
+
+<br></br>
+
+### Dependencies
+> First, download [dataset](https://www.kaggle.com/agirlcoding/all-space-missions-from-1957) to the root of the workspace
+
+```{r}
+# TODO: replace path with your own workspace
+setwd("~/Desktop/Mengji/R")
+```
+
+```{r}
+# change locale to UTF-8
+Sys.setlocale(locale = "en_US.UTF-8")
+
+libraries <- c("ggplot2", "plyr", "countrycode", "maps", "RColorBrewer", "cowplot")
+
+# install all required libraries
+for (lib in libraries) {
+	if(!requireNamespace(lib)) {
+	install.packages(lib, .libPaths(), repos='https://mirror.ibcp.fr/pub/CRAN/')
+	}
+	library(lib, character.only=TRUE)
+}
+```
+
+<br></br> 
+
+### Data
+```{r}
+# TODO: replace path with your own dataset file 
+# Load crime data from csv file
+space_missions <- read.csv('./space_missions.csv')
+
+head(space_missions)
+```
+
+```{r}
+# Rocket cost conversion to integer
+space_missions$Rocket[space_missions$Rocket == ""] <- NA
+space_missions$Rocket <- as.numeric(space_missions$Rocket)
+
+head(space_missions$Rocket)
+```
+
+```{r}
+# Extract country from location
+location_split <- strsplit(space_missions$Location, ', ')
+space_missions$Country <- sapply(location_split, function(x) {
+	country <- x[length(x)]
+	return(switch(
+		country,
+		'Shahrud Missile Test Site' = 'Iran',
+		'New Mexico' = 'USA',
+		'Yellow Sea' = 'China',
+		'Pacific Missile Range Facility' = 'USA',
+		'Barents Sea' = 'Russia',
+		'Gran Canaria' = 'USA',
+		country
+	))
+})
+
+unique(space_missions$Country)
+```
+
+```{r}
+# Fix typo
+space_missions$Company.Name[space_missions["Company.Name"] == 'Arm??e de l\'Air'] <- 'Armée de l\'Air'
+
+# Add company country manually
+space_missions$Company.Country <- sapply(space_missions$Company.Name, function(x) {
+	return(switch(
+		x,
+		'SpaceX' = 'USA',
+		'CASC' = 'China',
+		'Roscosmos' = 'Russia',
+		'ULA' = 'USA',
+		'JAXA' = 'Japan',
+		'Northrop' = 'USA',
+		'ExPace' = 'China',
+		'IAI' = 'Israel',
+		'Rocket Lab' = 'USA',
+		'Virgin Orbit' = 'USA',
+		'VKS RF' = 'Russia',
+		'MHI' = 'Japan',
+		'IRGC' = 'Iran',
+		'Arianespace' = 'France',
+		'ISA' = 'USA',
+		'Blue Origin' = 'USA',
+		'ISRO' = 'India',
+		'Exos' = 'USA',
+		'ILS' = 'USA',
+		'i-Space' = 'Japan',
+		'OneSpace' = 'China',
+		'Landspace' = 'China',
+		'Eurockot' = 'Germany',
+		'Land Launch' = 'Russia',
+		'CASIC' = 'China',
+		'KCST' = 'North Korea',
+		'Sandia' = 'Mexico',
+		'Kosmotras' = 'Russia',
+		'Khrunichev' = 'Russia',
+		'Sea Launch' = 'USA',
+		'KARI' = 'South Korea',
+		'ESA' = 'Europe',
+		'NASA' = 'USA',
+		'Boeing' = 'USA',
+		'ISAS' = 'Japan',
+		'SRC' = 'USA',
+		'MITT' = 'USA',
+		'Lockheed' = 'USA',
+		'AEB' = 'Brazil',
+		'Starsem' = 'Russia',
+		'RVSN USSR' = 'Russia',
+		'EER' = 'USA',
+		'General Dynamics' = 'USA',
+		'Martin Marietta' = 'USA',
+		'Yuzhmash' = 'Russia',
+		'Douglas' = 'USA',
+		'ASI' = 'Italy',
+		'US Air Force' = 'USA',
+		'CNES' = 'France',
+		'CECLES' = 'Europe',
+		'RAE' = 'Great Britain',
+		'UT' = 'USA',
+		'OKB-586' = 'Russia',
+		'AMBA' = 'Europe',
+		'Armée de l\'Air' = 'France',
+		'US Navy' = 'USA'
+	))
+})
+
+unique(space_missions$Company.Country)
+```
+
+```{r}
+# Convert string to date
+space_missions$Datum <- as.POSIXct(space_missions$Datum, tryFormats=c("%a %b %d, %Y", "%a %b %d, %Y %H:%M UTC"), origin = "1970-01-01", tz="UTC")
+
+# Extract year from date for future use 
+space_missions$Year <- as.numeric(format(space_missions$Datum, format="%Y"))
+
+head(space_missions$Datum)
+head(space_missions$Year)
+```
+
+<br></br>
+
+### Global analysis
+
+```{r}
+# group data by year, count number of launch, sum mission cost and average mission cost
+group_year <- ddply(space_missions, .(Year), summarize, COUNT=length(Year), SUM=sum(Rocket, na.rm=TRUE), MEAN=mean(Rocket, na.rm=TRUE))
+
+# plot number of launch
+count <- ggplot() + 
+	geom_line(data=group_year, aes(x=Year, y=COUNT), color="green") +
+  labs(title="Number of launch", y="")
+
+# plot total mission cost
+sum <- ggplot() + 
+	geom_col(data=group_year, aes(x=Year, y=SUM), fill="red") +
+  labs(title="Budget (in million)", y="")
+
+# plot average mission cost
+mean <- ggplot() + 
+	geom_col(data=group_year, aes(x=Year, y=MEAN), fill="blue") +
+  labs(title="Average budget by space mission (in million)", y="")
+
+# display all the plots in the same figure
+plot_grid(count, sum, mean, ncol = 1, nrow = 3)
+```
+
+<br></br>
+
+### Main rocket lauch sites
+
+```{r}
+# load world map
+map <- map_data("world")
+
+# group data by country
+top_launch_site <- ddply(space_missions, .(Country), summarize, COUNT=length(Country))
+
+# plot number of launch for each country
+ggplot() + 
+	geom_polygon(data=map, aes(x=long, y=lat, group=group), fill="lightgrey", colour="darkgrey", size=0.2) +
+	geom_map(data=top_launch_site, map=map, aes(map_id=Country, fill=COUNT), colour="darkgrey", size=0.2) +
+	scale_fill_distiller(palette="Reds", direction=1, name="Total launches") +
+  labs(title="Main rocket launch sites") +
+	coord_equal() +
+	theme_void()
+```
+
+<br></br>
+
+### Number of launch by companies
+
+```{r}
+# group data by company name and country
+top_company <- ddply(space_missions, .(Company.Name, Company.Country), summarize, COUNT=length(Company.Name))
+
+# remove company with only less than 2 launches for better readibility
+top_company <- top_company[top_company$COUNT > 1,]
+
+# decreasing order
+top_company <- top_company[order(top_company$COUNT, decreasing=TRUE),]
+top_company$Company.Name <- factor(top_company$Company.Name, levels=top_company$Company.Name)
+
+# plot number of launch for each company and add color corresponding to their countries
+ggplot() + 
+	geom_col(data=top_company, aes(x=Company.Name, y=COUNT, fill=Company.Country)) +
+	scale_fill_manual(values=colorRampPalette(brewer.pal(n=8, name="Set3"))(length(unique(top_company$Company.Country))), name="") +
+	scale_y_log10() + # logarithm scale for better readibility
+	theme(axis.text.x=element_text(angle=90, vjust=0.5, hjust=1)) +
+  labs(title="Number of launch by companies", x="Company", y="Number of launch")
+```
+
+<br></br>
+
+### Repartition of launch by country
+
+```{r}
+# plot repartition of launch by country for each year
+ggplot() + 
+	geom_bar(data=space_missions, aes(x=Year, fill=Company.Country), position='fill') +
+	scale_fill_manual(values=colorRampPalette(brewer.pal(n=8, name="Set3"))(length(unique(space_missions$Company.Country))), name="Countries") +
+  ggtitle('Repartition of launch by country') +
+  theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank())
+  labs(x="Year")
+```
+
+<br></br>
+
+### Mission status by year and company
+
+```{r}
+# saving a png bigger png version of the figure 
+# png(filename="mission_status.png", height=600, width=1200)
+
+# plot mission status for each year and company
+ggplot() + 
+	geom_point(data=space_missions, aes(x=Datum, y=Company.Name, color=Status.Mission), shape=20) +
+	scale_color_manual(values=c("red", "orange", "blue", "green"), name="Mission status") +
+  labs(title="Mission status by year and company", x="Year", y="Company")
+```
